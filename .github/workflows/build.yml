@@ -5,6 +5,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,6 +19,7 @@ jobs:
           if [ -f "project-bolt-sb1-rkcwftwf.zip" ]; then
             unzip -o project-bolt-sb1-rkcwftwf.zip -d temp_bolt
             cp -rn temp_bolt/project/* . 2>/dev/null || cp -rn temp_bolt/* .
+            rm -rf temp_bolt
           fi
 
       - uses: actions/setup-java@v4
@@ -28,11 +32,24 @@ jobs:
           gradle-version: '8.7'
 
       - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+        id: build_step
+        continue-on-error: true
+        run: |
+          gradle assembleDebug --stacktrace > build_output.log 2>&1
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Gokul-TTS-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+      - name: Save Result to Repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
+            cp app/build/outputs/apk/debug/app-debug.apk Gokul-TTS.apk
+            rm -f error.txt
+            git add Gokul-TTS.apk
+            git commit -m "Add built Gokul-TTS.apk" || true
+          else
+            tail -n 60 build_output.log > error.txt
+            git add error.txt
+            git commit -m "Add build error log" || true
+          fi
+          git push
 
